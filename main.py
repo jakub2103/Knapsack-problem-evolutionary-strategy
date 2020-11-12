@@ -1,20 +1,25 @@
 import numpy as np
-import random
 from operator import itemgetter
+import copy
+
 
 class Specimen(object):
      def __init__(self, dims, scope):
-          self.x = scope
+
+          self.x = copy.deepcopy(scope)
           self.dims = dims
-          if scope is None:             self.x = [100 for _ in range(dims)]
-          elif len(self.x) <= dims:     [self.x.append(100) for _ in range(len(scope), dims)]
+          if scope is None:             self.x = [10 for i in range(dims)]
+          elif len(self.x) <= dims:     [self.x.append(10) for _ in range(dims - len(self.x))]
           else:                         self.x = self.x[:dims]
+          for i in range(len(self.x)):
+               if self.x[i] > 0:
+                    self.x[i] = np.random.randint(0, self.x[i])
           self.s = np.random.random(len(self.x))
 
      def mutate(self):
-          s_gaussian = np.random.normal(loc=0.0,scale=1., size=(self.dims, ))
+          s_gaussian = np.random.normal(loc=0.0, scale=1., size=(self.dims, ))
           self.s = np.multiply(self.s, np.exp(s_gaussian))
-          x_gaussian = np.random.normal(loc=0.0,scale=self.s, size=(self.dims,))
+          x_gaussian = np.random.normal(loc=0.0, scale=self.s, size=(self.dims,))
           self.x = np.add(self.x, x_gaussian)
 
      def crossing(self, x, s, cross_chance=0.5):
@@ -30,7 +35,6 @@ class Specimen(object):
      def optimize_function(self, max_weight):
           result = 0
           element_weight = 10
-          #print(self.x)
           for x in self.x:
                result += x*element_weight
                element_weight += 10
@@ -57,7 +61,7 @@ class ES(object):
           # generate random first population
           self.population = []
           for _ in range(adam_and_eve):
-               self.population.append(Specimen(self.dims, self.scope))
+               self.population.append(Specimen(dims, scope))
           self.max_weight = max_weight
 
      def generate_children(self):
@@ -79,7 +83,7 @@ class ES(object):
                     new_population.append(parent_2)
                else:
                     new_population.append(temp_list_of_parents.pop(np.random.randint(len(temp_list_of_parents))))
-          # mutate all neww population
+          # mutate all new population
           for new_pop in range(len(new_population)):
                new_population[new_pop].mutate()
           self.population = np.append(self.population, new_population)
@@ -92,5 +96,6 @@ class ES(object):
           self.population = list(f(self.population))
 
 
-temp = ES(64, 2, scope=[14, 32])
+temp = ES(500, 8, scope=[50, 42])
 temp.generate_children()
+
