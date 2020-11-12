@@ -130,3 +130,5 @@ dmypy.json
 
 # Mardown backup
 README.md.backup
+# Idea file not included
+.idea/
