@@ -1,11 +1,12 @@
 import numpy as np
 from operator import itemgetter
 import copy
-
+import matplotlib.pyplot as plt
+import matplotlib
 
 class Specimen(object):
      def __init__(self, dims, scope):
-
+          self.scope = copy.deepcopy(scope)
           self.x = copy.deepcopy(scope)
           self.dims = dims
           if scope is None:             self.x = [10 for i in range(dims)]
@@ -20,7 +21,8 @@ class Specimen(object):
           s_gaussian = np.random.normal(loc=0.0, scale=1., size=(self.dims, ))
           self.s = np.multiply(self.s, np.exp(s_gaussian))
           x_gaussian = np.random.normal(loc=0.0, scale=self.s, size=(self.dims,))
-          self.x = np.add(self.x, x_gaussian)
+          if np.all(np.add(self.x, x_gaussian) < self.scope):
+               self.x = np.add(self.x, x_gaussian)
 
      def crossing(self, x, s, cross_chance=0.5):
           """
@@ -36,8 +38,11 @@ class Specimen(object):
           result = 0
           element_weight = 10
           for x in self.x:
-               result += x*element_weight
-               element_weight += 10
+               if x >= 0:
+                    result += x*element_weight
+                    element_weight += 10
+               else:
+                    return 0
           if result > max_weight:
                return 0
           return result
@@ -54,7 +59,7 @@ class ES(object):
      scope - it's possible to limit range of each dimmension
      """
 
-     def __init__(self, adam_and_eve, dims, scope=None, max_weight=500):
+     def __init__(self, adam_and_eve, dims, scope=None, max_weight=500, epochs=50):
           self.num_of_population = adam_and_eve
           self.dims = dims
           self.scope = scope
@@ -63,6 +68,7 @@ class ES(object):
           for _ in range(adam_and_eve):
                self.population.append(Specimen(dims, scope))
           self.max_weight = max_weight
+          self.epochs = epochs
 
      def generate_children(self):
           # Select (randomly) ro parents from population mi - if ro == mi take all
@@ -91,11 +97,34 @@ class ES(object):
           for pop in self.population:
                results.append(pop.optimize_function(self.max_weight))
           results = np.array(results)
+          #for i in results.argsort():
+          #     print("index: ", i , "value: ", results[i])
           best_of_index = results.argsort()[-self.num_of_population:][::-1]
           f = itemgetter(best_of_index)
           self.population = list(f(self.population))
 
+     def train(self):
+          fig, ax = plt.subplots()
+          for _ in range(self.epochs):
+               self.generate_children()
+               if self.dims == 2:
+                    self.plot(ax)
+          print(self.population[0].x)
+          print(self.population[0].optimize_function(self.max_weight))
 
-temp = ES(500, 8, scope=[50, 42])
-temp.generate_children()
+     def plot(self, ax):
+          ax.cla()
+          plt.xlim(0, self.scope[0] + 10)
+          plt.ylim(0, self.scope[1] + 10)
+          point_list = []
+          for pop in self.population:
+               point_list.append(pop.x)
+          point_list = np.array(point_list)
+          ax.scatter(point_list[:, 0], point_list[:, 1])
+          plt.pause(0.01)
+
+
+temp = ES(5000, 2, scope=[50, 700], epochs=20, max_weight=5000)
+temp.train()
+
 
