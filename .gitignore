@@ -127,3 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Mardown backup
+README.md.backup
+# Idea file not included
+.idea/
+
+
+# dataset files
+example_dataset.txt
