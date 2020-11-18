@@ -6,24 +6,39 @@ import pandas as pd
 
 
 class Specimen(object):
-     def __init__(self, dims, scope):
+     """
+     Single object representing single knapsack.
+     """
+     def __init__(self, scope):
           self.scope = copy.deepcopy(scope)
-          self.x = copy.deepcopy(scope)
-          self.dims = dims
-          if scope is None:             self.x = [10 for i in range(dims)]
-          elif len(self.x) <= dims:     [self.x.append(10) for _ in range(dims - len(self.x))]
-          else:                         self.x = self.x[:dims]
-          for i in range(len(self.x)):
-               if self.x[i] > 0:
-                    self.x[i] = np.random.randint(0, self.x[i])
-          self.s = np.random.random(len(self.x))
+          self.dims = 3
+          self.x = None
+          self.s = None
+          if self.scope is not None:     # scope == 3-dimmensional array [[1_amount, 1_weight, 1_value],[2_amout, ...],]
+               self.__gen_specimen_values__(self.scope)
+          self.sum_weight = 0
+          self.sum_value = 0
+
+     def __gen_specimen_values__(self, scope):
+          self.scope = copy.deepcopy(scope)
+          self.x = []
+          for i in self.scope:
+               self.x.append(np.random.randint(0, i[0]))    # random x
+          self.s = np.random.random(len(self.x))            # random s
 
      def __mutate__(self):
-          s_gaussian = np.random.normal(loc=0.0, scale=1., size=(self.dims, ))
+          s_gaussian = np.random.normal(loc=0.0, scale=1., size=(len(self.s), ))
           self.s = np.multiply(self.s, np.exp(s_gaussian))
-          x_gaussian = np.random.normal(loc=0.0, scale=self.s, size=(self.dims,))
-          if np.all(np.add(self.x, x_gaussian) < self.scope):
-               self.x = np.add(self.x, x_gaussian)
+          x_gaussian = np.random.normal(loc=0.0, scale=self.s, size=(len(self.x),))
+          if np.all(np.add(self.x, x_gaussian) < self.scope[:, 0]):
+               if np.any(np.add(self.x, x_gaussian) > self.scope[:, 0]):
+                    self.x = np.add(self.x, x_gaussian)
+
+     def __update_weight__(self):
+          self.sum_weight = np.sum(np.multiply(self.x, self.scope[:, 1]))
+
+     def __update_value__(self):
+          self.sum_value = np.sum(np.multiply(self.x, self.scope[:, 2]))
 
      def __crossing__(self, x, s, cross_chance=0.5):
           """
@@ -36,17 +51,11 @@ class Specimen(object):
           return x, s
 
      def __optimize_function__(self, max_weight):
-          result = 0
-          element_weight = 10
-          for x in self.x:
-               if x >= 0:
-                    result += x*element_weight
-                    element_weight += 10
-               else:
-                    return 0
-          if result > max_weight:
+          if self.sum_weight > max_weight:
                return 0
-          return result
+          if np.any(self.scope[:, 0] < self.x):
+               return 0
+          return self.sum_value
 
 
 class ES(object):
@@ -62,20 +71,23 @@ class ES(object):
      scope - it's possible to limit range of each dimmension
      """
 
-     def __init__(self, adam_and_eve, dims, scope=None, max_weight=500, epochs=50, error=5e-5):
+     def __init__(self, adam_and_eve, scope=None, max_weight=500, epochs=50, error=5e-5):
           self.num_of_population = adam_and_eve
-          self.dims = dims
-          self.scope = scope
-          self.error = error
+          self.dims = 3       # number of dimmensions [amount, weight, value]
+          self.scope = scope  # represents the maximum quantity and weight
+          self.error = error  # maximum allowable error
           # generate random first population
           self.population = []
-          self.best_result = 1
+          self.best_result = 0
           """Initial dataset represent example solution"""
           for _ in range(adam_and_eve):
-               self.population.append(Specimen(dims, scope))
-          self.max_weight = max_weight
-          self.epochs = epochs
-          self.data = None
+               self.population.append(Specimen(scope))
+          self.max_weight = max_weight  # maximum weight of knapsack
+          self.epochs = epochs          # number of epochs initial
+
+     def __define_max_real_weight__(self):
+          if self.max_weight > np.sum(np.multiply(self.scope[:, 0], self.scope[:, 2])):
+             self.max_weight = np.sum(np.multiply(self.scope[:, 0], self.scope[:, 2]))
 
      def load_from_file(self, file_path):
           """
@@ -84,13 +96,20 @@ class ES(object):
           """
           _, type = file_path.split(".")
           if type == 'txt':
-               self.data = np.loadtxt(file_path)
+               self.scope = np.loadtxt(file_path)
           elif type == 'xlsx':
-               self.data = pd.read_excel(file_path).to_numpy()
+               self.scope = pd.read_excel(file_path).to_numpy()
           elif type == 'csv':
-               self.data = pd.read_excel(file_path).to_numpy()
+               self.scope = pd.read_excel(file_path).to_numpy()
           else:
                print("Unsupported format")
+               return 0
+          print("File loaded")
+          for population in self.population:
+               population.__gen_specimen_values__(self.scope)
+          self.__define_max_real_weight__()
+          print("Max possible value: ", self.max_weight)
+          return 0
 
      def __generate_children__(self):
           # Select (randomly) ro parents from population mi - if ro == mi take all
@@ -116,42 +135,44 @@ class ES(object):
                new_population[new_pop].__mutate__()
           self.population = np.append(self.population, new_population)
           results = []
-          for pop in self.population:
-               results.append(pop.__optimize_function__(self.max_weight))
+          for population in self.population:
+               population.__update_value__()
+               population.__update_weight__()
+               results.append(population.__optimize_function__(self.max_weight))
           results = np.array(results)
           best_of_index = results.argsort()[-self.num_of_population:][::-1]
           self.best_result = results[best_of_index[0]]
           f = itemgetter(best_of_index)
           self.population = list(f(self.population))
 
-     def train(self):
+     def train(self, epochs=50, is_plot=True):
+          self.epochs = epochs
           fig, ax = plt.subplots()
           for epoch in range(self.epochs):
                print("Epoch: ", epoch)
                self.__generate_children__()
-               if self.dims == 2:
+               print("Max value in epoch: ", self.best_result)
+               if is_plot:
                     self.__plot__(ax)
-               if self.best_result/self.max_weight >= 1 - self.error:
-                    print(self.population[0].x)
-                    print(self.population[0].__optimize_function__(self.max_weight))
+               if self.best_result/self.max_weight >= 1 - self.error or epoch == self.epochs-1:
+                    print("Found optimal value")
+                    self.__plot__(ax, pause=1000)
                     break
 
-     def __plot__(self, ax):
+     def __plot__(self, ax, pause=0.15):
           ax.cla()
-          plt.xlim(0, self.scope[0] + 10)
-          plt.ylim(0, self.scope[1] + 10)
           point_list = []
-          for pop in self.population:
-               point_list.append(pop.x)
+          for population in self.population:
+               point_list.append([population.sum_weight, population.sum_value])
           point_list = np.array(point_list)
-          ax.scatter(point_list[:, 0], point_list[:, 1])
+          color_list = point_list[:, 1]/np.max(point_list[:, 1])
+          ax.scatter(point_list[:, 0], point_list[:, 1], c=color_list)
           if self.best_result/self.max_weight < 1 - self.error:
-               plt.pause(0.01)
+               plt.pause(pause)
 
 
-temp = ES(300, 2, scope=[500, 900], epochs=90, max_weight=19000, error=5e-4)
+temp = ES(1000, epochs=90, max_weight=27000, error=5e-4)
 temp.load_from_file("example_dataset.txt")
-print(temp.data)
-#temp.train()
+temp.train()
 
 
