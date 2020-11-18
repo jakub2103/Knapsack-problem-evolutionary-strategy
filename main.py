@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from generate_dataset_txt import generate
 
+
 class Specimen(object):
      """
      Single object representing single knapsack.
@@ -181,9 +182,9 @@ class ES(object):
 
 
 if __name__ == '__main__':
-     data = generate("", length=7, save_to_file=False)
-     es = ES(1000, error=5e-4, scope=data)
+     data = generate("", length=15, save_to_file=False)
+     es = ES(100000, error=5e-4, scope=data)
      # es.load_from_file("example_dataset.txt")
-     es.train(epochs=50)
+     es.train(epochs=30, is_plot=False)
 
 
