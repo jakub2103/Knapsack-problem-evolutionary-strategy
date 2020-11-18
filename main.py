@@ -3,7 +3,7 @@ from operator import itemgetter
 import copy
 import matplotlib.pyplot as plt
 import pandas as pd
-
+from generate_dataset_txt import generate
 
 class Specimen(object):
      """
@@ -31,7 +31,7 @@ class Specimen(object):
           self.s = np.multiply(self.s, np.exp(s_gaussian))
           x_gaussian = np.random.normal(loc=0.0, scale=self.s, size=(len(self.x),))
           if np.all(np.add(self.x, x_gaussian) < self.scope[:, 0]):
-               if np.any(np.add(self.x, x_gaussian) > self.scope[:, 0]):
+               if np.any(np.add(self.x, x_gaussian) > self.scope[:, 0]) and np.any(np.add(self.x, x_gaussian) > 0):
                     self.x = np.add(self.x, x_gaussian)
 
      def __update_weight__(self):
@@ -71,7 +71,7 @@ class ES(object):
      scope - it's possible to limit range of each dimmension
      """
 
-     def __init__(self, adam_and_eve, scope=None, max_weight=500, epochs=50, error=5e-5):
+     def __init__(self, adam_and_eve, scope=None, max_weight=90000000, error=5e-5, max_value=90000000):
           self.num_of_population = adam_and_eve
           self.dims = 3       # number of dimmensions [amount, weight, value]
           self.scope = scope  # represents the maximum quantity and weight
@@ -83,11 +83,20 @@ class ES(object):
           for _ in range(adam_and_eve):
                self.population.append(Specimen(scope))
           self.max_weight = max_weight  # maximum weight of knapsack
-          self.epochs = epochs          # number of epochs initial
+          self.max_value = max_value
+          if scope is not None:
+               self.__define_max_real_weight__()
+               self.__define_max_real_velue__()
 
      def __define_max_real_weight__(self):
-          if self.max_weight > np.sum(np.multiply(self.scope[:, 0], self.scope[:, 2])):
-             self.max_weight = np.sum(np.multiply(self.scope[:, 0], self.scope[:, 2]))
+          if self.max_weight > np.sum(np.multiply(self.scope[:, 0], self.scope[:, 1])):
+               self.max_weight = np.sum(np.multiply(self.scope[:, 0], self.scope[:, 1]))
+               print("Max possible weight was changed into", self.max_weight)
+
+     def __define_max_real_velue__(self):
+          if self.max_value > np.sum(np.multiply(self.scope[:, 0], self.scope[:, 2])):
+               self.max_value = np.sum(np.multiply(self.scope[:, 0], self.scope[:, 2]))
+               print("Max possible value was changed into", self.max_value)
 
      def load_from_file(self, file_path):
           """
@@ -108,7 +117,7 @@ class ES(object):
           for population in self.population:
                population.__gen_specimen_values__(self.scope)
           self.__define_max_real_weight__()
-          print("Max possible value: ", self.max_weight)
+          self.__define_max_real_velue__()
           return 0
 
      def __generate_children__(self):
@@ -146,15 +155,14 @@ class ES(object):
           self.population = list(f(self.population))
 
      def train(self, epochs=50, is_plot=True):
-          self.epochs = epochs
           fig, ax = plt.subplots()
-          for epoch in range(self.epochs):
+          for epoch in range(epochs):
                print("Epoch: ", epoch)
                self.__generate_children__()
                print("Max value in epoch: ", self.best_result)
                if is_plot:
                     self.__plot__(ax)
-               if self.best_result/self.max_weight >= 1 - self.error or epoch == self.epochs-1:
+               if self.best_result/self.max_value >= 1 - self.error or epoch == epochs-1:
                     print("Found optimal value")
                     self.__plot__(ax, pause=1000)
                     break
@@ -162,17 +170,20 @@ class ES(object):
      def __plot__(self, ax, pause=0.15):
           ax.cla()
           point_list = []
+          ax.set_xlim(0, self.max_weight)
+          ax.set_ylim(0, self.max_value)
           for population in self.population:
                point_list.append([population.sum_weight, population.sum_value])
           point_list = np.array(point_list)
           color_list = point_list[:, 1]/np.max(point_list[:, 1])
-          ax.scatter(point_list[:, 0], point_list[:, 1], c=color_list)
-          if self.best_result/self.max_weight < 1 - self.error:
-               plt.pause(pause)
+          ax.scatter(point_list[:, 0], point_list[:, 1], c=color_list, cmap='hot')
+          plt.pause(pause)
 
 
-temp = ES(1000, epochs=90, max_weight=27000, error=5e-4)
-temp.load_from_file("example_dataset.txt")
-temp.train()
+if __name__ == '__main__':
+     data = generate("", length=7, save_to_file=False)
+     es = ES(1000, error=5e-4, scope=data)
+     # es.load_from_file("example_dataset.txt")
+     es.train(epochs=50)
 
 
