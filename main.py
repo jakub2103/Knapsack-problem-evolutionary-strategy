@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from generate_dataset_txt import generate
 import time
+import scipy.stats as ss
 
 
 class Specimen(object):
@@ -28,11 +29,23 @@ class Specimen(object):
                self.x.append(np.random.randint(0, i[0]))    # random x
           self.s = np.random.random(len(self.x))            # random s
 
-     def __mutate__(self):
+     def __mutate__(self, discrete):
           s_gaussian = np.random.normal(loc=0.0, scale=1., size=(len(self.s), ))
           self.s = np.multiply(self.s, np.exp(s_gaussian))
-          x_gaussian = np.random.normal(loc=0.0, scale=self.s, size=(len(self.x),))
-          if np.all(np.add(self.x, x_gaussian) < self.scope[:, 0]):
+          # discrete gaussian distribution
+          if discrete:
+               x = np.arange(-len(self.x)//2, -len(self.x)//2+1)
+               xU, xL = x + 0.5, x - 0.5
+               prob = ss.norm.cdf(xU, scale=3) - ss.norm.cdf(xL, scale=3)
+               prob = prob / prob.sum()
+               x_gaussian = np.random.choice(x, size=(len(self.x), ), p=prob)
+
+          # cont gaussain distribution
+          else:
+               x_gaussian = np.random.normal(loc=0.0, scale=self.s, size=(len(self.x),))
+
+          if np.all(np.add(self.x, x_gaussian) < self.scope[:, 0]) and \
+                  np.all(np.add(self.x, x_gaussian) >= 0):
                if np.any(np.add(self.x, x_gaussian) > self.scope[:, 0]) and np.any(np.add(self.x, x_gaussian) > 0):
                     self.x = np.add(self.x, x_gaussian)
 
@@ -120,7 +133,7 @@ class ES(object):
           self.__define_max_real_velue__()
           return 0
 
-     def __generate_children__(self):
+     def __generate_children__(self, discrete, more_crossing=False):
           # Select (randomly) ro parents from population mi - if ro == mi take all
           ro = np.random.randint(self.num_of_population)    # random amount of offspring
           np.random.shuffle(self.population)
@@ -128,8 +141,13 @@ class ES(object):
           # Recombine the ro selected parents a to form a recombinant individual r
           np.random.shuffle(selected_parent)
           # cross only 25% of selected parent
-          temp_list_of_parents = selected_parent[:len(selected_parent)//4]
-          new_population = selected_parent[len(selected_parent)//4:]
+          if more_crossing:
+               temp_list_of_parents = selected_parent[:len(selected_parent)//4]
+               new_population = selected_parent[len(selected_parent)//4:]
+          # if there is problem with max value try to cross more parent
+          else:
+               temp_list_of_parents = selected_parent[:len(selected_parent)//3]
+               new_population = selected_parent[len(selected_parent)//3:]
           while len(temp_list_of_parents) > 0:
                if len(temp_list_of_parents) > 1:
                     parent_1 = temp_list_of_parents.pop(np.random.randint(len(temp_list_of_parents)))
@@ -141,7 +159,7 @@ class ES(object):
                     new_population.append(temp_list_of_parents.pop(np.random.randint(len(temp_list_of_parents))))
           # mutate all new population
           for new_pop in range(len(new_population)):
-               new_population[new_pop].__mutate__()
+               new_population[new_pop].__mutate__(discrete)
                new_population[new_pop].__update_value__()
                new_population[new_pop].__update_weight__()
           self.population = np.append(self.population, new_population)
@@ -150,18 +168,22 @@ class ES(object):
                results.append(population.__optimize_function__(self.max_weight))
           results = np.array(results)
           best_of_index = results.argsort()[-self.num_of_population:][::-1]
+          if self.best_result == results[best_of_index[0]]:
+               more_crossing = True
           self.best_result = results[best_of_index[0]]
           f = itemgetter(best_of_index)
           self.population = list(f(self.population))
+          return more_crossing
 
-     def train(self, epochs=50, is_plot=True):
+     def train(self, epochs=50, is_plot=True, discrete=True):
           fig, ax = plt.subplots()
           ep = 0
+          more_crossing = False
           for epoch in range(epochs):
                start = time.time()
                print("Epoch: ", epoch)
                ep = epoch
-               self.__generate_children__()
+               more_crossing = self.__generate_children__(discrete, more_crossing)
                print("Max value in epoch: ", self.best_result)
                if is_plot:
                     self.__plot__(ax, epoch, pause=0.15)
@@ -189,8 +211,8 @@ class ES(object):
 
 
 if __name__ == '__main__':
-     data = generate("", dims=8, save_to_file=False)
-     es = ES(10000, error=5e-7, scope=data, max_weight=5000)
-     es.train(epochs=30, is_plot=True)
+     data = generate("", dims=4, save_to_file=False)
+     es = ES(5000, error=5e-7, scope=data, max_weight=50000)
+     es.train(epochs=40, is_plot=True, discrete=True)
 
 
