@@ -4,6 +4,7 @@ import copy
 import matplotlib.pyplot as plt
 import pandas as pd
 from generate_dataset_txt import generate
+import time
 
 
 class Specimen(object):
@@ -36,10 +37,10 @@ class Specimen(object):
                     self.x = np.add(self.x, x_gaussian)
 
      def __update_weight__(self):
-          self.sum_weight = np.sum(np.multiply(self.x, self.scope[:, 1]))
+          self.sum_weight = copy.deepcopy(np.sum(np.multiply(self.x, self.scope[:, 1])))
 
      def __update_value__(self):
-          self.sum_value = np.sum(np.multiply(self.x, self.scope[:, 2]))
+          self.sum_value = copy.deepcopy(np.sum(np.multiply(self.x, self.scope[:, 2])))
 
      def __crossing__(self, x, s, cross_chance=0.5):
           """
@@ -53,8 +54,6 @@ class Specimen(object):
 
      def __optimize_function__(self, max_weight):
           if self.sum_weight > max_weight:
-               return 0
-          if np.any(self.scope[:, 0] < self.x):
                return 0
           return self.sum_value
 
@@ -125,7 +124,7 @@ class ES(object):
           # Select (randomly) ro parents from population mi - if ro == mi take all
           ro = np.random.randint(self.num_of_population)    # random amount of offspring
           np.random.shuffle(self.population)
-          selected_parent = self.population[:ro]
+          selected_parent = copy.deepcopy(self.population[:ro])
           # Recombine the ro selected parents a to form a recombinant individual r
           np.random.shuffle(selected_parent)
           # cross only 25% of selected parent
@@ -143,11 +142,11 @@ class ES(object):
           # mutate all new population
           for new_pop in range(len(new_population)):
                new_population[new_pop].__mutate__()
+               new_population[new_pop].__update_value__()
+               new_population[new_pop].__update_weight__()
           self.population = np.append(self.population, new_population)
           results = []
           for population in self.population:
-               population.__update_value__()
-               population.__update_weight__()
                results.append(population.__optimize_function__(self.max_weight))
           results = np.array(results)
           best_of_index = results.argsort()[-self.num_of_population:][::-1]
@@ -157,34 +156,41 @@ class ES(object):
 
      def train(self, epochs=50, is_plot=True):
           fig, ax = plt.subplots()
+          ep = 0
           for epoch in range(epochs):
+               start = time.time()
                print("Epoch: ", epoch)
+               ep = epoch
                self.__generate_children__()
                print("Max value in epoch: ", self.best_result)
                if is_plot:
-                    self.__plot__(ax)
-               if self.best_result/self.max_value >= 1 - self.error or epoch == epochs-1:
+                    self.__plot__(ax, epoch, pause=0.15)
+               if self.best_result/self.max_value >= 1 - self.error:
+                    print("Time for epoch: ", time.time() - start, "s \n")
                     print("Found optimal value")
-                    self.__plot__(ax, pause=1000)
                     break
+               print("Time for epoch: ", time.time() - start, "s \n")
+          self.__plot__(ax, ep, pause=10.)
 
-     def __plot__(self, ax, pause=0.15):
+     def __plot__(self, ax, epoch, pause=0.15):
           ax.cla()
           point_list = []
           ax.set_xlim(0, self.max_weight)
           ax.set_ylim(0, self.max_value)
+          ax.set_title("Epoch: " + str(epoch))
+          ax.set_ylabel('Summary Weight')
+          ax.set_xlabel('Summary Value')
           for population in self.population:
                point_list.append([population.sum_weight, population.sum_value])
           point_list = np.array(point_list)
           color_list = point_list[:, 1]/np.max(point_list[:, 1])
-          ax.scatter(point_list[:, 0], point_list[:, 1], c=color_list, cmap='hot')
+          ax.scatter(point_list[:, 0], point_list[:, 1], c=color_list)
           plt.pause(pause)
 
 
 if __name__ == '__main__':
-     data = generate("", length=15, save_to_file=False)
-     es = ES(100000, error=5e-4, scope=data)
-     # es.load_from_file("example_dataset.txt")
-     es.train(epochs=30, is_plot=False)
+     data = generate("", dims=8, save_to_file=False)
+     es = ES(10000, error=5e-7, scope=data, max_weight=5000)
+     es.train(epochs=30, is_plot=True)
 
 
