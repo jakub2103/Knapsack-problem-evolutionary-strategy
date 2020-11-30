@@ -219,21 +219,25 @@ class ES(object):
     def __plot__(self, ax, epoch, pause=0.15):
         ax.cla()
         point_list = []
-        ax.set_xlim(0, self.max_weight*1.1)
-        ax.set_ylim(0, self.max_value*1.1)
+        ax.set_xlim(-self.max_weight*0.05, self.max_weight*1.05)
+        ax.set_ylim(-self.max_value*0.05, self.max_value*1.05)
         ax.set_title("Epoch: " + str(epoch))
         ax.set_ylabel('Total value')
         ax.set_xlabel('Total weight')
         for population in self.population:
             point_list.append([population.sum_weight, population.sum_value])
         point_list = np.array(point_list)
-        color_list = point_list[:, 1] / np.max(point_list[:, 1])
+
+        if np.max(point_list[:, 1]) != 0:
+            color_list = point_list[:, 1] / np.max(point_list[:, 1])
+        else:
+           color_list = point_list[:, 1] / 1
         ax.scatter(point_list[:, 0], point_list[:, 1], c=color_list)
         plt.pause(pause)
 
 
 if __name__ == '__main__':
-    #data = generate("", dims=500, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[0, 10])
-    es = ES(1000)
-    es.load_example_problems(8)     # saved problems 1,2 and 8
+    data = generate("", dims=100, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[0, 10])
+    es = ES(1000, max_weight=1, scope=data)
+    #es.load_example_problems(8)     # saved problems 1,2 and 8
     es.train(epochs=50, is_plot=True, discrete=True)
