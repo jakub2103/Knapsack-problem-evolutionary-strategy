@@ -237,7 +237,7 @@ class ES(object):
 
 
 if __name__ == '__main__':
-    data = generate("", dims=100, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[0, 10])
-    es = ES(1000, max_weight=1, scope=data)
-    #es.load_example_problems(8)     # saved problems 1,2 and 8
+    #data = generate("", dims=100, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[0, 10])
+    es = ES(1000, max_weight=1)
+    es.load_example_problems(8)     # saved problems 1,2 and 8
     es.train(epochs=50, is_plot=True, discrete=True)
