@@ -95,13 +95,24 @@ class ES(object):
         self.population = []
         self.best_result = 0
         """Initial dataset represent example solution"""
-        for _ in range(adam_and_eve):
+        for _ in range(adam_and_eve - 1):
             self.population.append(Specimen(scope))
         self.max_weight = max_weight  # maximum weight of knapsack
         self.max_value = max_value
         if scope is not None:
-            self.__define_max_real_weight__()
-            self.__define_max_real_velue__()
+            self.__generate_specimen_from_scopes__()
+
+    def __generate_specimen_from_scopes__(self):
+        temp = np.zeros(np.array(self.scope).shape)
+        for i, population in enumerate(self.population):
+            if i < len(self.scope):
+                temp[i, 0] = 1
+                population.__gen_specimen_values__(temp)
+                temp[i, 0] = 0
+            else:
+                population.__gen_specimen_values__(self.scope)
+        self.__define_max_real_weight__()
+        self.__define_max_real_velue__()
 
     def __define_max_real_weight__(self):
         if self.max_weight > np.sum(np.multiply(self.scope[:, 0], self.scope[:, 1])):
@@ -117,7 +128,7 @@ class ES(object):
         """
           :param file_path: path to file
           :param type: possible formats [txt, xlsx, csv]
-          """
+        """
         _, type = file_path.split(".")
         if type == 'txt':
             self.scope = np.loadtxt(file_path)
@@ -129,10 +140,16 @@ class ES(object):
             print("Unsupported format")
             return 0
         print("File loaded")
-        for population in self.population:
-            population.__gen_specimen_values__(self.scope)
-        self.__define_max_real_weight__()
-        self.__define_max_real_velue__()
+        self.__generate_specimen_from_scopes__()
+        return 0
+
+    def load_example_problems(self, problem_number):
+        self.max_weight = np.loadtxt("Example_problems\\p0{}_c.txt".format(problem_number))
+        temp = np.loadtxt("Example_problems\\p0{}_w.txt".format(problem_number))
+        temp = np.transpose(np.append([temp], [np.loadtxt("Example_problems\\p0{}_p.txt".format(problem_number))],
+                                      axis=0))
+        self.scope = np.append(np.ones(shape=(len(temp), 1)), temp, axis=1)
+        self.__generate_specimen_from_scopes__()
         return 0
 
     def __generate_children__(self, discrete, more_crossing=False):
@@ -194,7 +211,7 @@ class ES(object):
                 print("Found optimal value")
                 break
             print("Time for epoch: ", time.time() - start, "s \n")
-        self.__plot__(ax, ep, pause=20.)
+        self.__plot__(ax, ep, pause=15.)
 
         # return best specimen
         return sorted(self.population, key=operator.attrgetter('sum_value'), reverse=True)[0]
@@ -216,6 +233,7 @@ class ES(object):
 
 
 if __name__ == '__main__':
-    data = generate("bbal", dims=500, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[0, 10])
-    es = ES(1000, error=5e-7, scope=data)
-    es.train(epochs=400, is_plot=True, discrete=True)
+    #data = generate("", dims=500, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[0, 10])
+    es = ES(1000)
+    es.load_example_problems(8)     # saved problems 1,2 and 8
+    es.train(epochs=50, is_plot=True, discrete=True)
