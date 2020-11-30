@@ -69,7 +69,7 @@ class Specimen(object):
 
     def __optimize_function__(self, max_weight):
         if self.sum_weight > max_weight:
-            return 0
+            return -1
         return self.sum_value
 
 
