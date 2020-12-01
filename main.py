@@ -7,6 +7,7 @@ from generate_dataset_txt import generate
 import time
 import scipy.stats as ss
 import operator
+import matplotlib.gridspec as gridspec
 
 
 class Specimen(object):
@@ -99,6 +100,10 @@ class ES(object):
             self.population.append(Specimen(scope))
         self.max_weight = max_weight  # maximum weight of knapsack
         self.max_value = max_value
+        self.best_results = []
+        self.max_weights = []
+        self.average_results = []
+        self.best_specimen = None
         if scope is not None:
             self.__generate_specimen_from_scopes__()
 
@@ -115,6 +120,7 @@ class ES(object):
         self.__define_max_real_velue__()
 
     def __define_max_real_weight__(self):
+        print(self.max_weight)
         if self.max_weight > np.sum(np.multiply(self.scope[:, 0], self.scope[:, 1])):
             self.max_weight = np.sum(np.multiply(self.scope[:, 0], self.scope[:, 1]))
             print("Max possible weight was changed into", self.max_weight)
@@ -122,19 +128,21 @@ class ES(object):
     def __define_max_real_velue__(self):
         if self.max_value > np.sum(np.multiply(self.scope[:, 0], self.scope[:, 2])):
             self.max_value = np.sum(np.multiply(self.scope[:, 0], self.scope[:, 2]))
+        if self.max_value > np.max(self.scope[:, 2]) * self.max_weight / np.max(self.scope[:, 1]):
+            self.max_value = np.max(self.scope[:, 2]) * self.max_weight / np.max(self.scope[:, 1])
             print("Max possible value was changed into", self.max_value)
 
     def load_from_file(self, file_path):
         """
+        possible formats [txt, xlsx, csv]
           :param file_path: path to file
-          :param type: possible formats [txt, xlsx, csv]
         """
-        _, type = file_path.split(".")
-        if type == 'txt':
+        _, filetype = file_path.split(".")
+        if filetype == 'txt':
             self.scope = np.loadtxt(file_path)
-        elif type == 'xlsx':
+        elif filetype == 'xlsx':
             self.scope = pd.read_excel(file_path).to_numpy()
-        elif type == 'csv':
+        elif filetype == 'csv':
             self.scope = pd.read_excel(file_path).to_numpy()
         else:
             print("Unsupported format")
@@ -195,12 +203,10 @@ class ES(object):
         return more_crossing
 
     def train(self, epochs=50, is_plot=True, discrete=True):
-        fig, ax = plt.subplots()
+        if is_plot:
+            fig, ax = plt.subplots()
         ep = 0
         more_crossing = False
-        best_result = []
-        max_weight = []
-        average_result = []
         for epoch in range(epochs):
             start = time.time()
             print("Epoch: ", epoch)
@@ -208,32 +214,34 @@ class ES(object):
             more_crossing = self.__generate_children__(discrete, more_crossing)
             print("Max value in epoch: ", self.best_result)
             if is_plot:
-                self.__plot__(ax, epoch, pause=0.05)
+                self.__plot__(ax, epoch, pause=0.15)
             if self.best_result / self.max_value >= 1 - self.error:
                 print("Time for epoch: ", time.time() - start, "s \n")
                 print("Found optimal value")
                 break
             print("Time for epoch: ", time.time() - start, "s \n")
-            best_result.append(sorted(self.population, key=operator.attrgetter('sum_value'), reverse=True)[0].sum_value)
-            max_weight.append(sorted(self.population, key=operator.attrgetter('sum_weight'), reverse=True)[0].sum_weight)
-            average_result.append(sum([specimen.sum_value for specimen in self.population])/len(self.population))
-            # for specimen in self.population:
-            #     print(specimen.sum_value)
-            # input()
-        # self.__plot__(ax, ep, pause=0)
-        self.__plot__(ax, ep, pause=15.)
-
-        # return best specimen
-        best_result.pop(0)
-        average_result.pop(0)
-        return sorted(self.population, key=operator.attrgetter('sum_value'), reverse=True)[0], \
-            best_result, average_result, max_weight
+            self.best_results.append(sorted(self.population, key=operator.attrgetter('sum_value'),
+                                            reverse=True)[0].sum_value)
+            self.max_weights.append(sorted(self.population, key=operator.attrgetter('sum_weight'),
+                                           reverse=True)[0].sum_weight)
+            self.average_results.append(
+                sum([specimen.sum_value for specimen in self.population]) / len(self.population))
+        if is_plot:
+            self.__plot__(ax, ep, pause=20.)
+            plt.close(fig)
+        # self.best_results.pop(0)
+        # self.max_weights.pop(0)
+        # self.average_results.pop(0)
+        self.best_specimen = sorted(self.population, key=operator.attrgetter('sum_value'), reverse=True)[0]
+        # if is_plot:
+        self.__plot_results__()
+        return self.best_specimen
 
     def __plot__(self, ax, epoch, pause=0.15):
         ax.cla()
         point_list = []
-        ax.set_xlim(-self.max_weight*0.05, self.max_weight*1.05)
-        ax.set_ylim(-self.max_value*0.05, self.max_value*1.05)
+        ax.set_xlim(-self.max_weight * 0.05, self.max_weight * 1.05)
+        ax.set_ylim(-self.max_value * 0.05, self.max_value * 1.05)
         ax.set_title("Epoch: " + str(epoch))
         ax.set_ylabel('Total value')
         ax.set_xlabel('Total weight')
@@ -244,24 +252,55 @@ class ES(object):
         if np.max(point_list[:, 1]) != 0:
             color_list = point_list[:, 1] / np.max(point_list[:, 1])
         else:
-           color_list = point_list[:, 1] / 1
+            color_list = point_list[:, 1] / 1
         ax.scatter(point_list[:, 0], point_list[:, 1], c=color_list)
-        # plt.pause(pause)
+        plt.pause(pause)
+
+    def __plot_results__(self):
+        fig = plt.figure("Results", tight_layout=True, figsize=(12, 8))
+        gs = gridspec.GridSpec(2, 2)
+
+        ax1 = fig.add_subplot(gs[0, :])
+        ax1.set_xlabel('Product ID')
+        ax1.set_title('Items')
+        ax1.axes.get_yaxis().set_visible(False)
+        chosen_items = np.array([[item_id, is_chosen] for item_id, is_chosen
+                                 in enumerate(self.best_specimen.x) if is_chosen == 1])
+        not_chosen_items = np.array([[item_id, is_chosen] for item_id, is_chosen
+                                     in enumerate(self.best_specimen.x) if is_chosen == 0])
+        if len(chosen_items > 0):
+            ax1.scatter(chosen_items[:, 0], chosen_items[:, 1], c='green', s=1, label='Chosen items')
+        if len(not_chosen_items > 0):
+            ax1.scatter(not_chosen_items[:, 0], not_chosen_items[:, 1], c='red', s=1, label='Not chosen items')
+        ax1.legend()
+
+        ax2 = fig.add_subplot(gs[1, 0])
+        ax2.plot(list(range(1, len(self.best_results) + 1)), self.best_results, label="Best result")
+        ax2.plot(list(range(1, len(self.average_results) + 1)), self.average_results, label="Average result")
+        ax2.set_xlabel('Generation')
+        ax2.set_ylabel('Value')
+        ax2.set_title('Change of value over generations')
+        ax2.legend()
+
+        ax3 = fig.add_subplot(gs[1, 1])
+        ax3.plot(list(range(1, len([es.max_weight for _ in self.max_weights]) + 1)),
+                 [es.max_weight for _ in self.max_weights], label="Maximum allowed weight")
+        ax3.plot(list(range(1, len(self.max_weights) + 1)), self.max_weights, label="Weight of the max value backpack")
+        ax3.set_xlabel('Generation')
+        ax3.set_ylabel('Weight')
+        ax3.set_title('Change of weight over generations')
+        ax3.legend(framealpha=1)
+
+        axes = [ax1, ax2, ax3]
+
+        fig.align_labels()
+        fig.patch.set_facecolor('xkcd:light grey')
+        for ax in axes:
+            ax.set_facecolor('xkcd:pale grey')
+        plt.show()
 
 
 if __name__ == '__main__':
-    data = generate("bbal", dims=500, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[0, 10])
-    es = ES(1000, error=5e-7, scope=data)
-    best_specimen, best, average, max_total_weight = es.train(epochs=4, is_plot=False, discrete=True)
-    plt.plot(best, label="Best result")
-    plt.plot(average, label="Average result")
-    plt.legend()
-    plt.show()
-    plt.plot([es.max_weight for _ in max_total_weight], label="Maximum allowed weight")
-    plt.plot(max_total_weight, label="Weight of the max value backpack")
-    plt.legend()
-    plt.show()
-    plt.scatter([i + 1 for i in range(len(best_specimen.x))], best_specimen.x)
-    plt.title("Wybrane artykuły")
-    plt.xlabel('ID przedmiotu')
-    plt.show()
+    data = generate("", dims=100, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[1, 10])
+    es = ES(1000, error=5e-7, scope=data, max_weight=20000)
+    es.train(epochs=100, is_plot=True, discrete=True)
