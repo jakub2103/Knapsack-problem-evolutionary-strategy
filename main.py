@@ -168,6 +168,7 @@ class ES(object):
         results = []
         for population in self.population:
             results.append(population.__optimize_function__(self.max_weight))
+        print(results)
         results = np.array(results)
         best_of_index = results.argsort()[-self.num_of_population:][::-1]
         if self.best_result == results[best_of_index[0]]:
@@ -181,6 +182,9 @@ class ES(object):
         fig, ax = plt.subplots()
         ep = 0
         more_crossing = False
+        best_result = []
+        max_weight = []
+        average_result = []
         for epoch in range(epochs):
             start = time.time()
             print("Epoch: ", epoch)
@@ -194,10 +198,19 @@ class ES(object):
                 print("Found optimal value")
                 break
             print("Time for epoch: ", time.time() - start, "s \n")
-        self.__plot__(ax, ep, pause=20.)
+            best_result.append(sorted(self.population, key=operator.attrgetter('sum_value'), reverse=True)[0].sum_value)
+            max_weight.append(sorted(self.population, key=operator.attrgetter('sum_weight'), reverse=True)[0].sum_weight)
+            average_result.append(sum([specimen.sum_value for specimen in self.population])/len(self.population))
+            # for specimen in self.population:
+            #     print(specimen.sum_value)
+            # input()
+        # self.__plot__(ax, ep, pause=0)
 
         # return best specimen
-        return sorted(self.population, key=operator.attrgetter('sum_value'), reverse=True)[0]
+        best_result.pop(0)
+        average_result.pop(0)
+        return sorted(self.population, key=operator.attrgetter('sum_value'), reverse=True)[0], \
+            best_result, average_result, max_weight
 
     def __plot__(self, ax, epoch, pause=0.15):
         ax.cla()
@@ -212,10 +225,22 @@ class ES(object):
         point_list = np.array(point_list)
         color_list = point_list[:, 1] / np.max(point_list[:, 1])
         ax.scatter(point_list[:, 0], point_list[:, 1], c=color_list)
-        plt.pause(pause)
+        # plt.pause(pause)
 
 
 if __name__ == '__main__':
     data = generate("bbal", dims=500, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[0, 10])
     es = ES(1000, error=5e-7, scope=data)
-    es.train(epochs=400, is_plot=True, discrete=True)
+    best_specimen, best, average, max_total_weight = es.train(epochs=4, is_plot=False, discrete=True)
+    plt.plot(best, label="Best result")
+    plt.plot(average, label="Average result")
+    plt.legend()
+    plt.show()
+    plt.plot([es.max_weight for _ in max_total_weight], label="Maximum allowed weight")
+    plt.plot(max_total_weight, label="Weight of the max value backpack")
+    plt.legend()
+    plt.show()
+    plt.scatter([i + 1 for i in range(len(best_specimen.x))], best_specimen.x)
+    plt.title("Wybrane artykuły")
+    plt.xlabel('ID przedmiotu')
+    plt.show()
