@@ -69,7 +69,7 @@ class Specimen(object):
 
     def __optimize_function__(self, max_weight):
         if self.sum_weight > max_weight:
-            return 0
+            return -1
         return self.sum_value
 
 
@@ -95,13 +95,24 @@ class ES(object):
         self.population = []
         self.best_result = 0
         """Initial dataset represent example solution"""
-        for _ in range(adam_and_eve):
+        for _ in range(adam_and_eve - 1):
             self.population.append(Specimen(scope))
         self.max_weight = max_weight  # maximum weight of knapsack
         self.max_value = max_value
         if scope is not None:
-            self.__define_max_real_weight__()
-            self.__define_max_real_velue__()
+            self.__generate_specimen_from_scopes__()
+
+    def __generate_specimen_from_scopes__(self):
+        temp = np.zeros(np.array(self.scope).shape)
+        for i, population in enumerate(self.population):
+            if i < len(self.scope):
+                temp[i, 0] = 1
+                population.__gen_specimen_values__(temp)
+                temp[i, 0] = 0
+            else:
+                population.__gen_specimen_values__(self.scope)
+        self.__define_max_real_weight__()
+        self.__define_max_real_velue__()
 
     def __define_max_real_weight__(self):
         if self.max_weight > np.sum(np.multiply(self.scope[:, 0], self.scope[:, 1])):
@@ -117,7 +128,7 @@ class ES(object):
         """
           :param file_path: path to file
           :param type: possible formats [txt, xlsx, csv]
-          """
+        """
         _, type = file_path.split(".")
         if type == 'txt':
             self.scope = np.loadtxt(file_path)
@@ -129,10 +140,16 @@ class ES(object):
             print("Unsupported format")
             return 0
         print("File loaded")
-        for population in self.population:
-            population.__gen_specimen_values__(self.scope)
-        self.__define_max_real_weight__()
-        self.__define_max_real_velue__()
+        self.__generate_specimen_from_scopes__()
+        return 0
+
+    def load_example_problems(self, problem_number):
+        self.max_weight = np.loadtxt("Example_problems\\p0{}_c.txt".format(problem_number))
+        temp = np.loadtxt("Example_problems\\p0{}_w.txt".format(problem_number))
+        temp = np.transpose(np.append([temp], [np.loadtxt("Example_problems\\p0{}_p.txt".format(problem_number))],
+                                      axis=0))
+        self.scope = np.append(np.ones(shape=(len(temp), 1)), temp, axis=1)
+        self.__generate_specimen_from_scopes__()
         return 0
 
     def __generate_children__(self, discrete, more_crossing=False):
@@ -168,7 +185,6 @@ class ES(object):
         results = []
         for population in self.population:
             results.append(population.__optimize_function__(self.max_weight))
-        print(results)
         results = np.array(results)
         best_of_index = results.argsort()[-self.num_of_population:][::-1]
         if self.best_result == results[best_of_index[0]]:
@@ -205,6 +221,7 @@ class ES(object):
             #     print(specimen.sum_value)
             # input()
         # self.__plot__(ax, ep, pause=0)
+        self.__plot__(ax, ep, pause=15.)
 
         # return best specimen
         best_result.pop(0)
@@ -215,15 +232,19 @@ class ES(object):
     def __plot__(self, ax, epoch, pause=0.15):
         ax.cla()
         point_list = []
-        ax.set_xlim(0, self.max_weight*1.1)
-        ax.set_ylim(0, self.max_value*1.1)
+        ax.set_xlim(-self.max_weight*0.05, self.max_weight*1.05)
+        ax.set_ylim(-self.max_value*0.05, self.max_value*1.05)
         ax.set_title("Epoch: " + str(epoch))
         ax.set_ylabel('Total value')
         ax.set_xlabel('Total weight')
         for population in self.population:
             point_list.append([population.sum_weight, population.sum_value])
         point_list = np.array(point_list)
-        color_list = point_list[:, 1] / np.max(point_list[:, 1])
+
+        if np.max(point_list[:, 1]) != 0:
+            color_list = point_list[:, 1] / np.max(point_list[:, 1])
+        else:
+           color_list = point_list[:, 1] / 1
         ax.scatter(point_list[:, 0], point_list[:, 1], c=color_list)
         # plt.pause(pause)
 
