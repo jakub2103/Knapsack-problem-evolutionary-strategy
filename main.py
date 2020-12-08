@@ -24,6 +24,8 @@ class Specimen(object):
             self.__gen_specimen_values__(self.scope)
         self.sum_weight = 0
         self.sum_value = 0
+        self.live_time = 1.
+        self.getting_older = 0.5
 
     def __gen_specimen_values__(self, scope):
         self.scope = copy.deepcopy(scope)
@@ -33,24 +35,22 @@ class Specimen(object):
         self.s = np.random.random(len(self.x))  # random s
 
     def __mutate__(self, discrete):
+        self.live_time += self.getting_older
         s_gaussian = np.random.normal(loc=0.0, scale=1., size=(len(self.s),))
         self.s = np.multiply(self.s, np.exp(s_gaussian))
         # discrete gaussian distribution
         if discrete:
-            x = np.arange(-len(self.x) // 2, -len(self.x) // 2 + 1)
-            xU, xL = x + 0.5, x - 0.5
-            prob = ss.norm.cdf(xU, scale=10) - ss.norm.cdf(xL, scale=10)
-            prob = prob / prob.sum()
-            x_gaussian = np.random.choice(x, size=(len(self.x),), p=prob)
-
-        # cont gaussain distribution
+            x_gaussian = np.random.normal(loc=0.0, scale=self.s, size=(len(self.x),))
+            for i, val in enumerate(x_gaussian):
+                if val > 0:
+                    self.x[i] = int(not self.x[i])
         else:
             x_gaussian = np.random.normal(loc=0.0, scale=self.s, size=(len(self.x),))
 
-        if np.all(np.add(self.x, x_gaussian) < self.scope[:, 0]) and \
+            if np.all(np.add(self.x, x_gaussian) < self.scope[:, 0]) and \
                 np.all(np.add(self.x, x_gaussian) >= 0):
-            if np.any(np.add(self.x, x_gaussian) > self.scope[:, 0]) and np.any(np.add(self.x, x_gaussian) > 0):
-                self.x = np.add(self.x, x_gaussian)
+                if np.any(np.add(self.x, x_gaussian) > self.scope[:, 0]) and np.any(np.add(self.x, x_gaussian) > 0):
+                    self.x = np.add(self.x, x_gaussian)
 
     def __update_weight__(self):
         self.sum_weight = copy.deepcopy(np.sum(np.multiply(self.x, self.scope[:, 1])))
@@ -70,8 +70,8 @@ class Specimen(object):
 
     def __optimize_function__(self, max_weight):
         if self.sum_weight > max_weight:
-            return -1
-        return self.sum_value
+            return -1, self.live_time
+        return [self.sum_value/self.live_time, self.live_time]
 
 
 class ES(object):
@@ -120,7 +120,6 @@ class ES(object):
         self.__define_max_real_velue__()
 
     def __define_max_real_weight__(self):
-        print(self.max_weight)
         if self.max_weight > np.sum(np.multiply(self.scope[:, 0], self.scope[:, 1])):
             self.max_weight = np.sum(np.multiply(self.scope[:, 0], self.scope[:, 1]))
             print("Max possible weight was changed into", self.max_weight)
@@ -128,8 +127,6 @@ class ES(object):
     def __define_max_real_velue__(self):
         if self.max_value > np.sum(np.multiply(self.scope[:, 0], self.scope[:, 2])):
             self.max_value = np.sum(np.multiply(self.scope[:, 0], self.scope[:, 2]))
-        if self.max_value > np.max(self.scope[:, 2]) * self.max_weight / np.max(self.scope[:, 1]):
-            self.max_value = np.max(self.scope[:, 2]) * self.max_weight / np.max(self.scope[:, 1])
             print("Max possible value was changed into", self.max_value)
 
     def load_from_file(self, file_path):
@@ -154,6 +151,10 @@ class ES(object):
     def load_example_problems(self, problem_number):
         self.max_weight = np.loadtxt("Example_problems\\p0{}_c.txt".format(problem_number))
         temp = np.loadtxt("Example_problems\\p0{}_w.txt".format(problem_number))
+        self.max_value = np.sum(np.multiply(np.loadtxt("Example_problems\\p0{}_p.txt".format(problem_number)),
+                                            np.loadtxt("Example_problems\\p0{}_s.txt".format(problem_number))))
+        print("Max value set to: ", self.max_value)
+
         temp = np.transpose(np.append([temp], [np.loadtxt("Example_problems\\p0{}_p.txt".format(problem_number))],
                                       axis=0))
         self.scope = np.append(np.ones(shape=(len(temp), 1)), temp, axis=1)
@@ -161,20 +162,22 @@ class ES(object):
         return 0
 
     def __generate_children__(self, discrete, more_crossing=False):
+        bigger_population = 5
+        if more_crossing: take_randomly = 0.4   # If results are bad, create 30% of new Specimens
+        else: take_randomly = 0.0
         # Select (randomly) ro parents from population mi - if ro == mi take all
         ro = np.random.randint(self.num_of_population)  # random amount of offspring
         np.random.shuffle(self.population)
         selected_parent = copy.deepcopy(self.population[:ro])
-        # Recombine the ro selected parents a to form a recombinant individual r
-        np.random.shuffle(selected_parent)
+        selected_parent = selected_parent*bigger_population
         # cross only 25% of selected parent
         if more_crossing:
-            temp_list_of_parents = selected_parent[:len(selected_parent) // 3]
-            new_population = selected_parent[len(selected_parent) // 3:]
+            temp_list_of_parents = selected_parent[:len(selected_parent) // 2]
+            new_population = selected_parent[len(selected_parent) // 2:]
         # if there is problem with max value try to cross more parent
         else:
-            temp_list_of_parents = selected_parent[:len(selected_parent) // 4]
-            new_population = selected_parent[len(selected_parent) // 4:]
+            temp_list_of_parents = selected_parent[:len(selected_parent) // 3]
+            new_population = selected_parent[len(selected_parent) // 3:]
         while len(temp_list_of_parents) > 0:
             if len(temp_list_of_parents) > 1:
                 parent_1 = temp_list_of_parents.pop(np.random.randint(len(temp_list_of_parents)))
@@ -189,17 +192,25 @@ class ES(object):
             new_population[new_pop].__mutate__(discrete)
             new_population[new_pop].__update_value__()
             new_population[new_pop].__update_weight__()
+            new_population[new_pop].live_time = 1.
         self.population = np.append(self.population, new_population)
         results = []
+        life_time = []
         for population in self.population:
-            results.append(population.__optimize_function__(self.max_weight))
+            results.append(population.__optimize_function__(self.max_weight)[0])
+            life_time.append(population.__optimize_function__(self.max_weight)[1])
         results = np.array(results)
-        best_of_index = results.argsort()[-self.num_of_population:][::-1]
-        if self.best_result == results[best_of_index[0]]:
+        best_of_index = results.argsort()[-int(self.num_of_population*(1-take_randomly)):][::-1]
+
+        if self.best_result == results[best_of_index[0]] * life_time[best_of_index[0]]:
             more_crossing = True
-        self.best_result = results[best_of_index[0]]
+        else:
+            more_crossing = False
+            self.best_result = results[best_of_index[0]] * life_time[best_of_index[0]]
         f = itemgetter(best_of_index)
         self.population = list(f(self.population))
+        for i in range(int(self.num_of_population*take_randomly)):
+            self.population.append(Specimen(self.scope))
         return more_crossing
 
     def train(self, epochs=50, is_plot=True, discrete=True):
@@ -209,17 +220,15 @@ class ES(object):
         more_crossing = False
         for epoch in range(epochs):
             start = time.time()
-            print("Epoch: ", epoch)
             ep = epoch
             more_crossing = self.__generate_children__(discrete, more_crossing)
-            print("Max value in epoch: ", self.best_result)
+            if not more_crossing or epoch%1000 == 0:
+                print("Epoch: ", epoch)
+                print("Max value in epoch: ", self.best_result)
             if is_plot:
-                self.__plot__(ax, epoch, pause=0.15)
-            if self.best_result / self.max_value >= 1 - self.error:
+                self.__plot__(ax, epoch)
+            if not more_crossing or epoch%1000 == 0:
                 print("Time for epoch: ", time.time() - start, "s \n")
-                print("Found optimal value")
-                break
-            print("Time for epoch: ", time.time() - start, "s \n")
             self.best_results.append(sorted(self.population, key=operator.attrgetter('sum_value'),
                                             reverse=True)[0].sum_value)
             self.max_weights.append(sorted(self.population, key=operator.attrgetter('sum_weight'),
@@ -227,17 +236,15 @@ class ES(object):
             self.average_results.append(
                 sum([specimen.sum_value for specimen in self.population]) / len(self.population))
         if is_plot:
-            self.__plot__(ax, ep, pause=20.)
+            self.__plot__(ax, ep, pause=3.)
             plt.close(fig)
-        # self.best_results.pop(0)
-        # self.max_weights.pop(0)
-        # self.average_results.pop(0)
+
         self.best_specimen = sorted(self.population, key=operator.attrgetter('sum_value'), reverse=True)[0]
         # if is_plot:
         self.__plot_results__()
         return self.best_specimen
 
-    def __plot__(self, ax, epoch, pause=0.15):
+    def __plot__(self, ax, epoch, pause=0.08):
         ax.cla()
         point_list = []
         ax.set_xlim(-self.max_weight * 0.05, self.max_weight * 1.05)
@@ -269,9 +276,9 @@ class ES(object):
         not_chosen_items = np.array([[item_id, is_chosen] for item_id, is_chosen
                                      in enumerate(self.best_specimen.x) if is_chosen == 0])
         if len(chosen_items > 0):
-            ax1.scatter(chosen_items[:, 0], chosen_items[:, 1], c='green', s=1, label='Chosen items')
+            ax1.scatter(chosen_items[:, 0], chosen_items[:, 1], c='green', s=10, label='Chosen items')
         if len(not_chosen_items > 0):
-            ax1.scatter(not_chosen_items[:, 0], not_chosen_items[:, 1], c='red', s=1, label='Not chosen items')
+            ax1.scatter(not_chosen_items[:, 0], not_chosen_items[:, 1], c='red', s=10, label='Not chosen items')
         ax1.legend()
 
         ax2 = fig.add_subplot(gs[1, 0])
@@ -301,6 +308,7 @@ class ES(object):
 
 
 if __name__ == '__main__':
-    data = generate("", dims=100, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[1, 10])
-    es = ES(1000, error=5e-7, scope=data, max_weight=20000)
-    es.train(epochs=100, is_plot=True, discrete=True)
+    #data = generate("", dims=100, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[1, 10])
+    es = ES(200, error=5e-7)
+    es.load_example_problems(8)
+    es.train(epochs=5000, is_plot=False, discrete=True)
