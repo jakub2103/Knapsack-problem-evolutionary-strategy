@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from generate_dataset_txt import generate
 import time
-import scipy.stats as ss
 import operator
 import matplotlib.gridspec as gridspec
 
@@ -25,7 +24,7 @@ class Specimen(object):
         self.sum_weight = 0
         self.sum_value = 0
         self.live_time = 1.
-        self.getting_older = 0.5
+        self.getting_older = 0.00
 
     def __gen_specimen_values__(self, scope):
         self.scope = copy.deepcopy(scope)
@@ -106,6 +105,7 @@ class ES(object):
         self.best_specimen = None
         if scope is not None:
             self.__generate_specimen_from_scopes__()
+        self.optimize_result = None
 
     def __generate_specimen_from_scopes__(self):
         temp = np.zeros(np.array(self.scope).shape)
@@ -153,6 +153,7 @@ class ES(object):
         temp = np.loadtxt("Example_problems\\p0{}_w.txt".format(problem_number))
         self.max_value = np.sum(np.multiply(np.loadtxt("Example_problems\\p0{}_p.txt".format(problem_number)),
                                             np.loadtxt("Example_problems\\p0{}_s.txt".format(problem_number))))
+        self.optimize_result = np.loadtxt("Example_problems\\p0{}_s.txt".format(problem_number))
         print("Max value set to: ", self.max_value)
 
         temp = np.transpose(np.append([temp], [np.loadtxt("Example_problems\\p0{}_p.txt".format(problem_number))],
@@ -163,7 +164,7 @@ class ES(object):
 
     def __generate_children__(self, discrete, more_crossing=False):
         bigger_population = 5
-        if more_crossing: take_randomly = 0.4   # If results are bad, create 30% of new Specimens
+        if more_crossing: take_randomly = 0.3   # If results are bad, create 30% of new Specimens
         else: take_randomly = 0.0
         # Select (randomly) ro parents from population mi - if ro == mi take all
         ro = np.random.randint(self.num_of_population)  # random amount of offspring
@@ -222,7 +223,7 @@ class ES(object):
             start = time.time()
             ep = epoch
             more_crossing = self.__generate_children__(discrete, more_crossing)
-            if not more_crossing or epoch%1000 == 0:
+            if not more_crossing or epoch%1000 == 1:
                 print("Epoch: ", epoch)
                 print("Max value in epoch: ", self.best_result)
             if is_plot:
@@ -276,9 +277,14 @@ class ES(object):
         not_chosen_items = np.array([[item_id, is_chosen] for item_id, is_chosen
                                      in enumerate(self.best_specimen.x) if is_chosen == 0])
         if len(chosen_items > 0):
-            ax1.scatter(chosen_items[:, 0], chosen_items[:, 1], c='green', s=10, label='Chosen items')
+            ax1.scatter(chosen_items[:, 0], chosen_items[:, 1], c='green', s=15, label='Chosen items')
         if len(not_chosen_items > 0):
-            ax1.scatter(not_chosen_items[:, 0], not_chosen_items[:, 1], c='red', s=10, label='Not chosen items')
+            ax1.scatter(not_chosen_items[:, 0], not_chosen_items[:, 1], c='red', s=15, label='Not chosen items')
+        if self.optimize_result is not None:
+            ax1.scatter(range(len(self.optimize_result)), self.optimize_result, c='blue', s=15,
+                        label='Optimal items', alpha=0.4)
+
+
         ax1.legend()
 
         ax2 = fig.add_subplot(gs[1, 0])
@@ -309,6 +315,6 @@ class ES(object):
 
 if __name__ == '__main__':
     #data = generate("", dims=100, save_to_file=False, restricted_amount=[1, 1], restricted_weight=[1, 10])
-    es = ES(200, error=5e-7)
+    es = ES(130, error=5e-7)
     es.load_example_problems(8)
-    es.train(epochs=5000, is_plot=False, discrete=True)
+    es.train(epochs=10000, is_plot=False, discrete=True)
